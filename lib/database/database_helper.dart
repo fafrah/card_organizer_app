@@ -2,35 +2,37 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
-  static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
+  static final DatabaseHelper _instance = DatabaseHelper._internal();
+  factory DatabaseHelper() => _instance;
+  DatabaseHelper._internal();
 
-  DatabaseHelper._init();
+  Database? _db;
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('cards.db');
-    return _database!;
+  Future<Database> get db async {
+    if (_db != null) return _db!;
+    _db = await _initDb();
+    return _db!;
   }
 
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+  Future<Database> _initDb() async {
+    final databasePath = await getDatabasesPath();
+    final path = join(databasePath, 'cards.db');
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(path, version: 1, onCreate: _onCreate);
   }
 
-  Future _createDB(Database db, int version) async {
+  Future _onCreate(Database db, int version) async {
+    // Create Folders table
     await db.execute('''
-      CREATE TABLE folders(
+      CREATE TABLE folders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folder_name TEXT,
-        timestamp TEXT
+        folder_name TEXT
       )
     ''');
 
+    // Create Cards table with foreign key
     await db.execute('''
-      CREATE TABLE cards(
+      CREATE TABLE cards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         card_name TEXT,
         suit TEXT,
@@ -40,26 +42,17 @@ class DatabaseHelper {
       )
     ''');
 
-    await _insertFolders(db);
-    await _insertCards(db);
+    await db.insert('folders', {'folder_name': 'Hearts'});
+    await db.insert('folders', {'folder_name': 'Spades'});
+
+    // Prepopulate cards
+    await _prepopulateCards(db);
   }
 
-  Future _insertFolders(Database db) async {
-    List suits = ['Hearts', 'Spades'];
-
-    for (var suit in suits) {
-      await db.insert('folders', {
-        'folder_name': suit,
-        'timestamp': DateTime.now().toString(),
-      });
-    }
-  }
-
-  Future _insertCards(Database db) async {
-    List suits = ['Hearts', 'Spades'];
-
-    List cards = [
-      'Ace',
+  Future _prepopulateCards(Database db) async {
+    final suits = ['hearts', 'spades'];
+    final ranks = [
+      'ace',
       '2',
       '3',
       '4',
@@ -69,20 +62,26 @@ class DatabaseHelper {
       '8',
       '9',
       '10',
-      'Jack',
-      'Queen',
-      'King',
+      'jack',
+      'queen',
+      'king',
     ];
 
     for (int folderId = 1; folderId <= suits.length; folderId++) {
-      for (var card in cards) {
+      for (var rank in ranks) {
         await db.insert('cards', {
-          'card_name': card,
+          'card_name': rank,
           'suit': suits[folderId - 1],
-          'image_url': '',
+          'image_url':
+              'assets/cards/${suits[folderId - 1].toLowerCase()}_$rank.jpg',
           'folder_id': folderId,
         });
       }
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllCards() async {
+    final database = await db;
+    return await database.query('cards');
   }
 }
